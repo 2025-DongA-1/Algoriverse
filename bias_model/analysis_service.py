@@ -8,9 +8,18 @@ from ckonlpy.tag import Twitter
 from gensim.models import Word2Vec
 import os
 
-# 파일 경로 설정 (같은 폴더에 있다고 가정)
-MODEL_PATH = 'algoriverse.model'
-CONF_PATH = 'bias_data_final.csv'
+# ==========================================
+# [수정] 파일 경로 동적 설정 (폴더 구조 변경 반영)
+# ==========================================
+# 현재 이 파일(analysis_service.py)이 있는 위치를 기준점으로 잡습니다.
+# 이렇게 하면 어디서 실행하든 경로 에러가 절대 안 납니다!
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# models 폴더 안의 모델 파일 경로
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'algoriverse.model')
+
+# data 폴더 안의 CSV 파일 경로
+CONF_PATH = os.path.join(BASE_DIR, 'data', 'bias_data_final.csv')
 
 class BiasAnalyzer:
     def __init__(self):
@@ -18,12 +27,15 @@ class BiasAnalyzer:
         
         # 1. 모델 파일 존재 확인
         if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"❌ 모델 파일({MODEL_PATH})이 없습니다. Colab에서 다운로드해주세요.")
+            raise FileNotFoundError(f"❌ 모델 파일을 찾을 수 없습니다.\n예상 경로: {MODEL_PATH}")
             
         # 2. Word2Vec 모델 로드
         self.model = Word2Vec.load(MODEL_PATH)
         
         # 3. 설정 파일(CSV) 로드
+        if not os.path.exists(CONF_PATH):
+             raise FileNotFoundError(f"❌ 설정 파일(CSV)을 찾을 수 없습니다.\n예상 경로: {CONF_PATH}")
+
         try:
             self.df_conf = pd.read_csv(CONF_PATH)
         except:

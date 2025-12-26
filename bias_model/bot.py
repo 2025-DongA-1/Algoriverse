@@ -26,7 +26,7 @@ DB_PORT = int(os.getenv("DB_PORT"))
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")     
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 
-CONF_FILE = 'bias_data_final.csv'
+CONF_FILE = 'data/bias_data_final.csv'
 
 # ==========================================
 # [준비] AI 분석기 미리 로딩 (봇 켜질 때 1번만)
