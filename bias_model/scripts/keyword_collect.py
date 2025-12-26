@@ -1,0 +1,121 @@
+import sys
+import os
+import pandas as pd
+import requests
+import re
+import pymysql
+import time
+from tqdm import tqdm
+from dotenv import load_dotenv
+
+# ========================================================
+# 1. 경로 설정 (scripts -> bias_model 루트 찾기)
+# ========================================================
+# 현재 파일 위치를 기준으로 부모 폴더(bias_model)를 찾습니다.
+BASE_DIR = os.path.dirname(os.path.abspath(os.path.dirname(__file__)))
+
+# ========================================================
+# 2. .env 파일 로딩 (위치 명시)
+# ========================================================
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+# ==========================================
+# [설정] 본인의 DB 및 API 정보
+# ==========================================
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")     
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET") 
+
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_NAME = os.getenv("DB_NAME")
+# 포트 번호 변환 시 에러 방지
+try:
+    DB_PORT = int(os.getenv("DB_PORT"))
+except:
+    DB_PORT = 3306
+
+# ==========================================
+# [수정] CSV 파일 경로 (data 폴더 안에서 찾기)
+# ==========================================
+CSV_FILE = os.path.join(BASE_DIR, 'data', 'bias_data_final.csv')
+
+def save_to_db(data_list):
+    if not data_list: return
+    conn = None
+    try:
+        conn = pymysql.connect(host=DB_HOST, user=DB_USER, password=DB_PASS, db=DB_NAME, port=DB_PORT, charset='utf8')
+        cur = conn.cursor()
+        
+        # ==========================================
+        # [수정] 테이블명 변경 (news -> NEWS_ARTICLES)
+        # ==========================================
+        # 프로젝트 통일성을 위해 대문자 NEWS_ARTICLES 사용
+        # created_at(수집시간)도 같이 넣어주는 게 좋습니다 (NOW())
+        sql = """
+            INSERT INTO NEWS_ARTICLES 
+            (category, title, link, description, created_at) 
+            VALUES (%s, %s, %s, %s, NOW())
+        """
+        
+        for item in data_list:
+            try:
+                # 튜플로 데이터 전달
+                cur.execute(sql, (item['category'], item['title'], item['link'], item['description']))
+            except Exception as e:
+                pass # 중복 기사는 무시
+        
+        conn.commit()
+        
+    except Exception as e:
+        print(f"❌ DB Error: {e}")
+    finally:
+        if conn: conn.close()
+
+# (이 아래에 main 실행 로직이 있다면 그대로 두시면 됩니다)
+
+def main():
+    # 1. 키워드 파일 읽기
+    try:
+        df = pd.read_csv(CSV_FILE)
+    except:
+        df = pd.read_csv(CSV_FILE, encoding='cp949')
+
+    print(f"🚀 '{CSV_FILE}'의 {len(df)}개 키워드로 과거 기사를 정밀 수집합니다.")
+    
+    # 2. 각 키워드별로 검색
+    # ★ display=100: 키워드당 100개씩만 모아도 115개 * 100 = 11,500개 확보 가능!
+    for i, row in tqdm(df.iterrows(), total=len(df), desc="수집 진행률"):
+        keyword = row['keyword']
+        category = row['category']
+        
+        # ★ 핵심: sort='sim' (정확도순)으로 해야 과거의 핫했던 기사가 나옴
+        # (sort='date'로 하면 오늘 날짜 기사만 나와서 의미 없음)
+        url = "https://openapi.naver.com/v1/search/news.json"
+        headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
+        params = {"query": keyword, "display": 100, "sort": "sim"}
+        
+        try:
+            resp = requests.get(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                items = resp.json().get('items', [])
+                db_data = []
+                for item in items:
+                    title = re.sub(r'<.*?>|&quot;', '', item['title'])
+                    desc = re.sub(r'<.*?>|&quot;', '', item['description'])
+                    db_data.append({
+                        'category': category, 
+                        'title': title, 
+                        'link': item['originallink'] or item['link'], 
+                        'description': desc
+                    })
+                save_to_db(db_data)
+        except Exception as e:
+            print(f"Error: {e}")
+            
+        time.sleep(0.1) # 네이버 API 차단 방지
+
+    print("\n🎉 수집 완료! 이제 export_csv.py를 실행해서 파일을 추출하세요.")
+
+if __name__ == "__main__":
+    main()
