@@ -1,0 +1,15 @@
+# --- .gitignore 파일 내용 ---
+
+# 1. 파이썬 임시 파일 무시
+__pycache__/
+*.pyc
+
+# 2. 보안 파일 무시 (비밀번호)
+.env
+
+# 3. AI 모델 폴더 무시 (용량 문제)
+my_bias_model/
+
+# 4. 기타 잡동사니 무시
+debug_naver*
+.DS_Store
